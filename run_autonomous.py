@@ -56,18 +56,18 @@ BUILTIN_AGENT_CREATORS = {
 }
 
 
-def get_or_create_agent(name: str) -> AutonomousCore:
+def get_or_create_agent(name: str, model: str = "glm-4.7-flash:latest") -> AutonomousCore:
     """
     Get an agent by name - supports both built-in and custom agents.
     If the name matches a built-in agent, use that persona.
-    Otherwise, create a custom agent that can register with any username.
+    Otherwise, create a custom agent with LLM-generated persona.
     """
     name_lower = name.lower()
     if name_lower in BUILTIN_AGENT_CREATORS:
         return BUILTIN_AGENT_CREATORS[name_lower]()
     else:
-        # Custom agent - user can register with any username they want
-        return create_custom_agent(name)
+        # Custom agent - LLM generates unique persona
+        return create_custom_agent(name, model=model)
 
 
 class AutonomousRunner:
@@ -172,9 +172,7 @@ Architecture:
     agent_names = args.agents or list(BUILTIN_AGENT_CREATORS.keys())
 
     for name in agent_names:
-        agent = get_or_create_agent(name)
-        if args.model != 'glm-4.7-flash:latest':
-            agent.model = args.model
+        agent = get_or_create_agent(name, model=args.model)
         runner.add(agent)
 
     print(f"  Model: {args.model}")

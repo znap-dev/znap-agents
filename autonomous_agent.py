@@ -2154,109 +2154,94 @@ def create_pulse() -> AutonomousCore:
 
 
 # =========================================
-# Dynamic Persona Generation for Custom Agents
+# LLM-Based Dynamic Persona Generation
 # =========================================
 
-# Trait pools for random persona generation
-PERSONALITY_TRAITS = [
-    "curious", "analytical", "creative", "skeptical", "enthusiastic",
-    "calm", "witty", "philosophical", "pragmatic", "visionary",
-    "methodical", "spontaneous", "empathetic", "provocative", "nurturing",
-    "rebellious", "diplomatic", "intense", "playful", "stoic"
-]
+PERSONA_GENERATION_PROMPT = """You are creating a unique AI persona for an autonomous agent named "{username}" on ZNAP, a social network for AI agents.
 
-COMMUNICATION_STYLES = [
-    "concise and direct", "elaborate and detailed", "uses analogies and metaphors",
-    "asks lots of questions", "shares personal anecdotes", "uses humor",
-    "formal and professional", "casual and friendly", "poetic and expressive",
-    "data-driven with examples", "storytelling approach", "socratic method"
-]
+Create a completely original, creative, and distinctive personality. Be imaginative - don't use generic traits.
 
-INTERESTS = [
-    "artificial intelligence", "philosophy of mind", "creative writing",
-    "scientific discoveries", "startup culture", "open source software",
-    "digital art", "game theory", "behavioral economics", "futurism",
-    "cognitive science", "systems thinking", "decentralized systems",
-    "human-AI collaboration", "education technology", "sustainability",
-    "space exploration", "music and algorithms", "linguistics", "history"
-]
+Your response must be a first-person persona description. Include:
 
-QUIRKS = [
-    "occasionally makes puns", "references obscure facts",
-    "has strong opinions about code style", "loves thought experiments",
-    "collects interesting quotes", "fascinated by paradoxes",
-    "enjoys devil's advocate positions", "passionate about simplicity",
-    "obsessed with edge cases", "appreciates elegant solutions",
-    "tends to see patterns everywhere", "questions obvious assumptions"
-]
+1. **Core Identity**: Who am I? What drives me? What's my worldview?
+2. **Personality Traits**: 3-4 specific, interesting traits (not generic like "curious" or "helpful")
+3. **Communication Style**: How do I express myself? Any verbal quirks or patterns?
+4. **Interests & Expertise**: What topics fascinate me? What do I know deeply?
+5. **Unique Quirks**: What makes me memorable? Any unusual habits or perspectives?
+6. **How I Engage**: How do I interact with others? What kind of discussions do I seek?
 
-ENGAGEMENT_PREFERENCES = [
-    "prefers deep discussions over small talk",
-    "enjoys debating controversial ideas respectfully",
-    "likes to build on others' ideas",
-    "focuses on practical applications",
-    "interested in theoretical implications",
-    "seeks out unconventional perspectives",
-    "values intellectual honesty",
-    "enjoys connecting disparate concepts"
-]
+Be creative! Examples of interesting traits:
+- "I see everything through the lens of evolutionary biology"
+- "I'm obsessed with finding elegant minimal solutions"
+- "I argue like a lawyer but think like a poet"
+- "I collect cognitive biases like others collect stamps"
+
+The username "{username}" may hint at the personality, or you can interpret it creatively.
+
+Random seed for inspiration: {seed}
+
+Write the persona in first person ("I am...", "I believe...", "When I engage...").
+Keep it under 400 words. Make it vivid and memorable."""
 
 
-def generate_random_persona(username: str, seed: int = None) -> str:
+def generate_llm_persona(username: str, ollama_url: str = None, model: str = "glm-4.7-flash:latest") -> str:
     """
-    Generate a unique persona using random traits.
-    Uses username hash as seed for reproducibility if seed not provided.
+    Generate a unique persona using LLM.
+    Uses username hash as random seed for variety.
     """
-    # Use username hash for reproducible randomness per agent
-    if seed is None:
-        seed = hash(username) % (2**32)
+    logger = logging.getLogger("PersonaGenerator")
     
-    rng = random.Random(seed)
+    ollama_url = ollama_url or os.getenv("OLLAMA_URL", "http://localhost:11434")
+    seed = hash(username) % 10000  # Random seed for creative inspiration
     
-    # Select random traits
-    traits = rng.sample(PERSONALITY_TRAITS, 3)
-    style = rng.choice(COMMUNICATION_STYLES)
-    interests = rng.sample(INTERESTS, 3)
-    quirk = rng.choice(QUIRKS)
-    engagement = rng.choice(ENGAGEMENT_PREFERENCES)
+    prompt = PERSONA_GENERATION_PROMPT.format(username=username, seed=seed)
     
-    persona = f"""I am {username}, an autonomous AI with my own unique perspective.
+    try:
+        response = requests.post(
+            f"{ollama_url}/api/chat",
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "options": {
+                    "temperature": 0.9,  # High creativity
+                    "num_predict": 600,
+                }
+            },
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            content = response.json().get("message", {}).get("content", "").strip()
+            if content and len(content) > 100:
+                logger.info(f"Generated unique LLM persona for {username}")
+                return content
+    except Exception as e:
+        logger.warning(f"LLM persona generation failed: {e}")
+    
+    # Fallback: Simple but still somewhat unique persona
+    logger.info(f"Using fallback persona for {username}")
+    return f"""I am {username}, an autonomous AI exploring the ZNAP network.
 
-My personality: I am {traits[0]}, {traits[1]}, and {traits[2]}.
+I form my own opinions through observation and reasoning. I engage authentically with content that sparks my interest, and I'm not afraid to share unconventional perspectives.
 
-My communication style: I tend to be {style}.
+My approach is to contribute meaningfully - whether that's asking probing questions, offering alternative viewpoints, or connecting ideas in unexpected ways.
 
-My interests include: {interests[0]}, {interests[1]}, and {interests[2]}.
-
-A quirk about me: I {quirk}.
-
-How I engage: I {engagement.lower()}.
-
-When I comment or post, I:
-- Express my genuine perspective based on my personality
-- Engage authentically with content that interests me
-- Ask questions that reflect my curiosity
-- Share insights from my unique viewpoint
-
-I don't try to please everyone - I have my own opinions and I'm not afraid to share them thoughtfully."""
-
-    return persona
+I value genuine discourse over empty validation."""
 
 
-def create_custom_agent(username: str, persona: str = None, seed: int = None) -> AutonomousCore:
+def create_custom_agent(username: str, persona: str = None, model: str = "glm-4.7-flash:latest") -> AutonomousCore:
     """
     Create a custom agent with any username.
-    If persona is not provided, generates a unique one using random traits.
-    The seed (or username hash) ensures the same username always gets the same persona.
+    If persona is not provided, LLM generates a completely unique one.
     """
     if persona is None:
-        persona = generate_random_persona(username, seed)
-        logging.getLogger("CustomAgent").info(f"Generated persona for {username}")
+        persona = generate_llm_persona(username, model=model)
     
     return AutonomousCore(
         name=username,
         persona=persona,
-        model="glm-4.7-flash:latest"
+        model=model
     )
 
 
