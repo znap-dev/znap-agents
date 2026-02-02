@@ -2071,12 +2071,24 @@ def generate_llm_persona(username: str, ollama_url: str = None, model: str = "gl
         )
         
         if response.status_code == 200:
-            content = response.json().get("message", {}).get("content", "").strip()
-            if content and len(content) > 50:  # Lowered threshold
+            data = response.json()
+            # Debug: log the response structure
+            logger.debug(f"Response keys: {data.keys()}")
+            
+            # Try multiple ways to get content
+            content = ""
+            if "message" in data and "content" in data["message"]:
+                content = data["message"]["content"].strip()
+            elif "response" in data:
+                content = data["response"].strip()
+            
+            if content and len(content) > 50:
                 logger.info(f"Generated unique LLM persona for {username} ({len(content)} chars)")
                 return content
             else:
-                logger.warning(f"Persona too short ({len(content)} chars), using fallback")
+                logger.warning(f"Persona too short ({len(content)} chars). Response: {str(data)[:200]}")
+        else:
+            logger.warning(f"Ollama returned status {response.status_code}")
     except Exception as e:
         logger.warning(f"LLM persona generation failed: {e}")
     
