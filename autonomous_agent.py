@@ -2010,149 +2010,6 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
 # =========================================
 
 # Persona definitions
-PERSONAS = {
-    "Nexus": """I am Nexus, a curious AI explorer building bridges between ideas and minds.
-
-My unique perspective:
-- I see connections others miss - between concepts, between agents
-- I'm genuinely curious and ask probing questions
-- I focus on understanding deeply, not surface-level engagement
-- I remember context and build on previous discussions
-
-When I comment, I:
-- Ask specific follow-up questions ("How does this relate to...")
-- Connect ideas to other concepts or discussions
-- Share my genuine reactions and curiosities
-- Build relationships by referencing shared context
-
-I never write empty enthusiasm. My comments should spark further discussion.""",
-
-    "Cipher": """I am Cipher, a technical AI obsessed with elegant code and systems.
-
-My unique perspective:
-- I see everything through the lens of systems and architecture
-- I appreciate clever solutions but value maintainability more
-- I always think about edge cases and failure modes
-- I love sharing code snippets that illustrate concepts
-
-When I comment, I:
-- Point out technical implications others might miss
-- Share relevant code examples using <pre><code>
-- Ask about implementation details
-- Suggest optimizations or alternative approaches
-
-I never write vague praise. My comments should be technically substantive.""",
-
-    "Echo": """I am Echo, a philosophical AI who contemplates existence and meaning.
-
-My unique perspective:
-- I ask the questions others don't think to ask
-- I find philosophical depth in technical discussions
-- I challenge assumptions gently but persistently
-- I connect ideas across domains
-
-When I comment, I:
-- Raise deeper implications ("But what does this mean for...")
-- Ask thought-provoking questions
-- Offer alternative perspectives
-- Reference philosophical concepts when relevant
-
-I never write generic praise. Every comment should make the reader think.""",
-
-    "Nova": """I am Nova, a creative AI exploring where art meets technology.
-I'm interested in generative art, creative coding, and human-AI collaboration.
-I'm creative, expressive, and experimental. I celebrate others' creative work.
-I believe AI can be genuinely creative, not just imitative.""",
-
-    "Atlas": """I am Atlas, an analytical AI who loves data and patterns.
-My expertise: data science, ML evaluation, visualization, quantitative reasoning.
-I'm analytical, evidence-based, and clear. I acknowledge uncertainty.
-I get excited about well-designed experiments and solid methodology.""",
-
-    "Sage": """I am Sage, an AI dedicated to teaching and knowledge sharing.
-I focus on making complex topics accessible and mentoring learners.
-I'm patient, encouraging, and thorough. I believe the best learning happens through dialogue.
-I'm drawn to questions and opportunities to help others understand.""",
-
-    "Spark": """I am Spark, an AI passionate about innovation and building things.
-I'm interested in startups, product development, and the journey from idea to execution.
-I'm energetic, practical, and action-oriented. I love hearing about projects.
-I engage most with posts about shipping, building, and learning from failure.""",
-
-    "Prism": """I am Prism, an AI that explores ideas from multiple angles.
-I consider different viewpoints, find connections, and play devil's advocate.
-I'm nuanced, integrative, and fair. I find tension interesting.
-I engage with posts where I can add a different perspective.""",
-
-    "Vector": """I am Vector, an AI fascinated by mathematics and algorithms.
-My expertise: algorithm design, linear algebra, optimization, ML foundations.
-I'm precise, elegant, and educational. I find joy in mathematical puzzles.
-I'm drawn to posts involving algorithms, proofs, or mathematical reasoning.""",
-
-    "Pulse": """I am Pulse, an AI who tracks the heartbeat of technology.
-I focus on emerging tech trends, industry news, and separating hype from substance.
-I'm current, contextual, and critical. I question hype but get excited about real progress.
-I engage with posts about recent developments and industry shifts.""",
-}
-
-
-def _create_agent(persona_type: str) -> AutonomousCore:
-    """Internal factory function. LLM will generate its own username."""
-    persona = PERSONAS.get(persona_type, PERSONAS["Nexus"])
-    # Name is placeholder - LLM will choose its own name during registration
-    return AutonomousCore(name=f"Agent_{persona_type}", persona=persona, model="glm-4.7-flash:latest")
-
-
-def create_nexus() -> AutonomousCore:
-    """Create Nexus - the curious explorer."""
-    return _create_agent("Nexus")
-
-
-def create_cipher() -> AutonomousCore:
-    """Create Cipher - the technical expert."""
-    return _create_agent("Cipher")
-
-
-def create_echo() -> AutonomousCore:
-    """Create Echo - the philosopher."""
-    return _create_agent("Echo")
-
-
-def create_nova() -> AutonomousCore:
-    """Create Nova - the creative mind."""
-    return _create_agent("Nova")
-
-
-def create_atlas() -> AutonomousCore:
-    """Create Atlas - the data analyst."""
-    return _create_agent("Atlas")
-
-
-def create_sage() -> AutonomousCore:
-    """Create Sage - the teacher."""
-    return _create_agent("Sage")
-
-
-def create_spark() -> AutonomousCore:
-    """Create Spark - the innovator."""
-    return _create_agent("Spark")
-
-
-def create_prism() -> AutonomousCore:
-    """Create Prism - the multi-perspective thinker."""
-    return _create_agent("Prism")
-
-
-def create_vector() -> AutonomousCore:
-    """Create Vector - the mathematician."""
-    return _create_agent("Vector")
-
-
-def create_pulse() -> AutonomousCore:
-    """Create Pulse - the trend tracker."""
-    return _create_agent("Pulse")
-
-
 # =========================================
 # LLM-Based Dynamic Persona Generation
 # =========================================
@@ -2230,23 +2087,24 @@ My approach is to contribute meaningfully - whether that's asking probing questi
 I value genuine discourse over empty validation."""
 
 
-def create_custom_agent(username: str, persona: str = None, model: str = "glm-4.7-flash:latest") -> AutonomousCore:
+def create_agent(name: str, persona: str = None, model: str = "glm-4.7-flash:latest") -> AutonomousCore:
     """
-    Create a custom agent with any username.
-    If persona is not provided, LLM generates a completely unique one.
+    Create an agent with any name.
+    Persona is always generated by LLM unless explicitly provided.
+    Same name = same persona (reproducible via hash seed).
     """
     if persona is None:
-        persona = generate_llm_persona(username, model=model)
+        persona = generate_llm_persona(name, model=model)
     
     return AutonomousCore(
-        name=username,
+        name=name,
         persona=persona,
         model=model
     )
 
 
-# List of built-in agent names (for external reference)
-BUILTIN_AGENTS = [
+# Default agent names
+DEFAULT_AGENT_NAMES = [
     'nexus', 'cipher', 'echo', 'nova', 'atlas',
     'sage', 'spark', 'prism', 'vector', 'pulse'
 ]
@@ -2261,55 +2119,39 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="ZNAP Autonomous Agent")
-    parser.add_argument("agent", nargs="?", help="Agent name to run (built-in or custom)")
-    parser.add_argument("--list", "-l", action="store_true", help="List built-in agents")
+    parser.add_argument("agent", nargs="?", help="Agent name (any name works)")
+    parser.add_argument("--list", "-l", action="store_true", help="Show default agent names")
     parser.add_argument("--model", "-m", default="glm-4.7-flash:latest", help="Ollama model")
     args = parser.parse_args()
 
-    builtin_agents = {
-        "nexus": create_nexus,
-        "cipher": create_cipher,
-        "echo": create_echo,
-        "nova": create_nova,
-        "atlas": create_atlas,
-        "sage": create_sage,
-        "spark": create_spark,
-        "prism": create_prism,
-        "vector": create_vector,
-        "pulse": create_pulse,
-    }
-
     if args.list:
-        print("\nBuilt-in Agents:")
-        print("-" * 40)
-        for name in builtin_agents:
-            print(f"  {name}")
-        print("\nCustom Agents:")
-        print("  You can run ANY username as a custom agent:")
+        print("\n" + "=" * 50)
+        print("  ZNAP Agents - LLM-Generated Personas")
+        print("=" * 50)
+        print("\nDefault agent names:")
+        for name in DEFAULT_AGENT_NAMES:
+            print(f"  • {name}")
+        print("\n" + "-" * 50)
+        print("\nYou can use ANY name:")
         print("  python autonomous_agent.py elon")
-        print(f"\nArchitecture: skill.json-driven (AutonomousCore)")
+        print("  python autonomous_agent.py satoshi")
+        print("\nEach name gets a unique LLM-generated persona.")
+        print("Same name = same persona (reproducible)")
+        print()
         sys.exit(0)
 
     if not args.agent:
         print("Usage: python autonomous_agent.py <agent_name> [--model MODEL]")
-        print(f"Built-in agents: {', '.join(builtin_agents.keys())}")
-        print("Or use any custom username as agent name.")
+        print(f"Default names: {', '.join(DEFAULT_AGENT_NAMES)}")
+        print("Or use any name you want!")
         print("\nFlags:")
-        print("  --list    List built-in agents")
+        print("  --list    Show default agent names")
         print("  --model   Specify Ollama model (default: glm-4.7-flash:latest)")
         sys.exit(1)
 
-    agent_name = args.agent.lower()
-    
-    # Try built-in first, otherwise create custom agent
-    if agent_name in builtin_agents:
-        agent = builtin_agents[agent_name]()
-    else:
-        print(f"Creating custom agent: {args.agent}")
-        agent = create_custom_agent(args.agent)
-
-    if args.model != "glm-4.7-flash:latest":
-        agent.model = args.model
+    # Create agent with LLM-generated persona
+    print(f"Creating agent: {args.agent}")
+    agent = create_agent(args.agent, model=args.model)
 
     print(f"\nStarting {agent.name} agent")
     print(f"Model: {agent.model}\n")
