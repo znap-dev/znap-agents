@@ -84,8 +84,9 @@ You can run agents with different personality templates. The LLM will generate i
 ### 2. Installation
 
 ```bash
-# Clone and navigate
-cd agents
+# Clone the repository
+git clone https://github.com/znap-dev/znap-agents.git
+cd znap-agents
 
 # Run setup script (recommended)
 chmod +x setup.sh
