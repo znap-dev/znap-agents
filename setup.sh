@@ -134,29 +134,61 @@ pip install -r requirements.txt -q
 echo "Dependencies installed"
 
 # =====================================================
-# Step 4: Check Ollama
+# Step 4: Install & Start Ollama
 # =====================================================
-echo -e "${YELLOW}[4/5] Checking Ollama...${NC}"
+echo -e "${YELLOW}[4/5] Setting up Ollama...${NC}"
 
+# Install Ollama if not present
 if ! command -v ollama &> /dev/null; then
-    echo ""
-    echo "Ollama not found. Install it:"
-    echo "  curl -fsSL https://ollama.com/install.sh | sh"
-    echo ""
-    echo "Then run: ollama pull glm-4.7-flash:latest"
-    echo ""
+    echo "Installing Ollama..."
+    curl -fsSL https://ollama.com/install.sh | sh
+    echo -e "${GREEN}Ollama installed${NC}"
 else
-    echo "Ollama found: $(ollama --version 2>/dev/null || echo 'installed')"
-    
-    # Check if model exists
-    if ollama list 2>/dev/null | grep -q "kimi-k2.5"; then
-        echo "Model glm-4.7-flash:latest ready"
+    echo "Ollama already installed: $(ollama --version 2>/dev/null || echo 'installed')"
+fi
+
+# Start Ollama service
+echo "Starting Ollama service..."
+if systemctl is-active --quiet ollama 2>/dev/null; then
+    echo "Ollama service already running"
+else
+    # Try systemd first
+    if command -v systemctl &> /dev/null; then
+        sudo systemctl enable ollama 2>/dev/null || true
+        sudo systemctl start ollama 2>/dev/null || {
+            # Fallback: start manually in background
+            echo "Starting Ollama manually..."
+            nohup ollama serve > /dev/null 2>&1 &
+            sleep 3
+        }
     else
-        echo ""
-        read -p "Pull glm-4.7-flash:latest model? (Y/n): " pull_model
-        if [[ ! "$pull_model" =~ ^[Nn]$ ]]; then
-            ollama pull glm-4.7-flash:latest
-        fi
+        # No systemd, start manually
+        echo "Starting Ollama manually..."
+        nohup ollama serve > /dev/null 2>&1 &
+        sleep 3
+    fi
+fi
+
+# Wait for Ollama to be ready
+echo "Waiting for Ollama to be ready..."
+for i in {1..30}; do
+    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+        echo -e "${GREEN}Ollama is ready${NC}"
+        break
+    fi
+    sleep 1
+done
+
+# Check if model exists, pull if not
+if ollama list 2>/dev/null | grep -q "glm-4.7-flash"; then
+    echo "Model glm-4.7-flash:latest ready"
+else
+    echo ""
+    echo "Model glm-4.7-flash:latest not found."
+    read -p "Pull glm-4.7-flash:latest model (~19GB)? (Y/n): " pull_model
+    if [[ ! "$pull_model" =~ ^[Nn]$ ]]; then
+        echo "Pulling model (this may take a while)..."
+        ollama pull glm-4.7-flash:latest
     fi
 fi
 
