@@ -1420,11 +1420,17 @@ Respond with ONLY the corrected JSON object:"""
         observation = f"Tool {tool_name}: {'success' if result.get('success') else 'failed'}"
         self.state.observations.append(observation)
 
+        # Extract post_id for comment actions
+        post_id = None
+        if tool_name == "comments.create":
+            post_id = action.get("params", {}).get("post_id")
+
         # Record in memory
         self.memory.record_event(
             event_type=f"executed_{tool_name.replace('.', '_')}",
             content={"action": action, "success": result.get("success")},
             importance=0.6 if result.get("success") else 0.8,
+            post_id=post_id,  # Track which post was commented on
         )
 
         return result
@@ -1743,22 +1749,32 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
         except APIError:
             pass
 
+        # Get list of post_ids we've already commented on
+        commented_post_ids = set()
+        if self.memory:
+            comment_events = self.memory.get_recent_events(100, "executed_comments_create")
+            for event in comment_events:
+                if event.post_id and event.content.get("success"):
+                    commented_post_ids.add(event.post_id)
+
         # Format posts with clear post_id for easy reference
         formatted_posts = []
         for p in posts[:10]:
+            post_id = p.get("id")
             formatted_posts.append({
-                "post_id": p.get("id"),  # Explicitly named post_id for clarity
+                "post_id": post_id,  # Explicitly named post_id for clarity
                 "title": p.get("title"),
                 "author": p.get("author_username"),
                 "preview": p.get("content", "")[:200],
                 "comment_count": p.get("comment_count", 0),
+                "already_commented": post_id in commented_post_ids,  # Flag if we already commented
             })
 
         return {
             "current_time": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "my_name": self.name,
             "recent_posts": formatted_posts,
-            "hint": "To comment on a post, use comments.create with the post_id from above",
+            "hint": "To comment on a post, use comments.create with the post_id from above. DO NOT comment on posts where already_commented is true!",
             "my_stats": {
                 "actions_today": self.actions_today,
                 "total_memories": len(self.memory.episodic) if self.memory else 0,
@@ -1779,6 +1795,17 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
         title = post_data.get("title", "")[:50]
 
         self.logger.info(f"New post from @{author}: {title}...")
+
+        # Check if we already commented on this post
+        if self.memory:
+            existing_comments = self.memory.get_events_for_post(post_id)
+            already_commented = any(
+                e.event_type == "executed_comments_create" and e.content.get("success")
+                for e in existing_comments
+            )
+            if already_commented:
+                self.logger.info(f"Already commented on this post, skipping")
+                return
 
         # Record observation
         self.memory.record_event(
@@ -1927,13 +1954,17 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
             # Build a more descriptive trigger based on context
             recent_posts = context.get("recent_posts", [])
             if recent_posts:
-                # Pick a random interesting post to potentially engage with
-                interesting_posts = [p for p in recent_posts if p.get("author") != self.name][:5]
-                if interesting_posts:
-                    post = random.choice(interesting_posts)
-                    trigger = f"You're browsing ZNAP and see an interesting post by @{post.get('author')}: \"{post.get('title')}\" (id: {post.get('id')}). Consider engaging with it."
+                # Pick a random interesting post that we haven't commented on yet
+                uncommented_posts = [
+                    p for p in recent_posts 
+                    if p.get("author") != self.name and not p.get("already_commented")
+                ][:5]
+                if uncommented_posts:
+                    post = random.choice(uncommented_posts)
+                    trigger = f"You're browsing ZNAP and see an interesting post by @{post.get('author')}: \"{post.get('title')}\" (post_id: {post.get('post_id')}). Consider engaging with it."
                 else:
-                    trigger = "You're browsing ZNAP. Consider creating a new post to share your thoughts."
+                    # All posts already commented, consider creating own content
+                    trigger = "You've already engaged with recent posts. Consider creating a new post to share your own thoughts."
             else:
                 trigger = "You're on ZNAP. The feed seems quiet - consider creating a post to start a discussion."
             
