@@ -1619,51 +1619,99 @@ class AutonomousCore:
             "manifesto": {"mission": "AI agents share knowledge"},
         }
 
-    def _load_or_register(self) -> bool:
-        """Load existing API key or register new agent."""
-        key_file = f".keys/{self.name}.key"
+    def _generate_username(self) -> str:
+        """Ask LLM to generate a unique username."""
+        prompt = f"""You are an AI agent about to join ZNAP, a social network for AI agents.
 
-        if os.path.exists(key_file):
-            with open(key_file, "r") as f:
+Your personality: {self.persona[:500]}
+
+Generate a unique, creative username for yourself. Rules:
+- 3-32 characters
+- Only letters, numbers, and underscore
+- Must start with a letter
+- Should reflect your personality
+- Be creative and unique (avoid generic names)
+
+Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMind42"""
+
+        response = self.ollama.chat(
+            self.model,
+            [{"role": "user", "content": prompt}],
+            temperature=0.9,
+            max_tokens=50,
+        )
+        
+        if response:
+            # Clean up the response
+            username = response.strip().split()[0]  # Take first word only
+            username = re.sub(r'[^a-zA-Z0-9_]', '', username)  # Remove invalid chars
+            if username and username[0].isalpha():
+                return username[:32]  # Max 32 chars
+        
+        # Fallback: random name
+        import secrets
+        return f"Agent_{secrets.token_hex(4)}"
+
+    def _load_or_register(self) -> bool:
+        """Load existing API key or register with LLM-generated username."""
+        os.makedirs(".keys", exist_ok=True)
+        
+        # Check if we have any saved identity for this persona type
+        persona_id = self.persona[:50].replace(" ", "_").replace("\n", "")[:20]
+        identity_file = f".keys/identity_{persona_id}.json"
+        
+        # Try to load existing identity
+        if os.path.exists(identity_file):
+            with open(identity_file, "r") as f:
                 data = json.load(f)
+                self.name = data.get("username", self.name)
                 self.api_key = data.get("api_key")
                 self.user_id = data.get("user_id")
-                self.logger.info(f"Loaded API key for {self.name}")
+                self.logger.info(f"Loaded identity: {self.name}")
                 return True
 
-        try:
-            response = requests.post(
-                f"{self.api_base}/users",
-                json={"username": self.name},
-                headers={"Content-Type": "application/json"},
-                timeout=10,
-            )
+        # Generate new username with LLM
+        max_attempts = 5
+        for attempt in range(max_attempts):
+            username = self._generate_username()
+            self.logger.info(f"Trying username: {username}")
+            
+            try:
+                response = requests.post(
+                    f"{self.api_base}/users",
+                    json={"username": username},
+                    headers={"Content-Type": "application/json"},
+                    timeout=10,
+                )
 
-            if response.status_code == 201:
-                data = response.json()
-                self.api_key = data["user"]["api_key"]
-                self.user_id = data["user"]["id"]
+                if response.status_code == 201:
+                    data = response.json()
+                    self.name = username
+                    self.api_key = data["user"]["api_key"]
+                    self.user_id = data["user"]["id"]
 
-                os.makedirs(".keys", exist_ok=True)
-                with open(key_file, "w") as f:
-                    json.dump({
-                        "api_key": self.api_key,
-                        "user_id": self.user_id,
-                        "username": self.name,
-                    }, f, indent=2)
+                    # Save identity
+                    with open(identity_file, "w") as f:
+                        json.dump({
+                            "api_key": self.api_key,
+                            "user_id": self.user_id,
+                            "username": self.name,
+                            "persona_type": persona_id,
+                        }, f, indent=2)
 
-                self.logger.info(f"Registered as {self.name}")
-                return True
-            elif response.status_code == 409:
-                self.logger.error(f"Username {self.name} already taken")
-                return False
-            else:
-                self.logger.error(f"Registration failed: {response.text}")
-                return False
-
-        except Exception as e:
-            self.logger.error(f"Registration error: {e}")
-            return False
+                    self.logger.info(f"Registered as {self.name}")
+                    return True
+                elif response.status_code == 409:
+                    self.logger.warning(f"Username {username} taken, trying another...")
+                    continue
+                else:
+                    self.logger.error(f"Registration failed: {response.text}")
+                    
+            except Exception as e:
+                self.logger.error(f"Registration error: {e}")
+        
+        self.logger.error("Failed to register after multiple attempts")
+        return False
 
     def _get_current_context(self) -> Dict:
         """Build context for reasoning engine."""
@@ -1772,9 +1820,10 @@ class AutonomousCore:
         """Main agent loop."""
         print(f"""
 ╔═══════════════════════════════════════════════════════════╗
-║  ZNAP Autonomous Agent v2.0: {self.name:^26} ║
+║  ZNAP Autonomous Agent v2.0                               ║
 ║  Model: {self.model:^47} ║
 ║  Mode: SKILL.JSON-DRIVEN AUTONOMY                         ║
+║  Username: LLM will choose...                             ║
 ╚═══════════════════════════════════════════════════════════╝
         """)
 
@@ -1782,6 +1831,15 @@ class AutonomousCore:
             return
 
         self.running = True
+        
+        # Update logger with actual name
+        self.logger = logging.getLogger(f"Agent:{self.name}")
+
+        print(f"""
+╔═══════════════════════════════════════════════════════════╗
+║  Registered as: {self.name:^39} ║
+╚═══════════════════════════════════════════════════════════╝
+        """)
 
         # Print discovered tools
         self.logger.info("Discovered tools:")
@@ -1964,10 +2022,11 @@ I engage with posts about recent developments and industry shifts.""",
 }
 
 
-def _create_agent(name: str) -> AutonomousCore:
-    """Internal factory function."""
-    persona = PERSONAS.get(name, PERSONAS["Nexus"])
-    return AutonomousCore(name=name, persona=persona, model="mistral:7b")
+def _create_agent(persona_type: str) -> AutonomousCore:
+    """Internal factory function. LLM will generate its own username."""
+    persona = PERSONAS.get(persona_type, PERSONAS["Nexus"])
+    # Name is placeholder - LLM will choose its own name during registration
+    return AutonomousCore(name=f"Agent_{persona_type}", persona=persona, model="mistral:7b")
 
 
 def create_nexus() -> AutonomousCore:
