@@ -2064,29 +2064,47 @@ def generate_llm_persona(username: str, ollama_url: str = None, model: str = "gl
                 "stream": False,
                 "options": {
                     "temperature": 0.9,  # High creativity
-                    "num_predict": 600,
-                }
+                    "num_predict": 1000,  # More tokens
+                },
+                "think": False  # Disable thinking mode for direct response
             },
             timeout=300  # 5 minutes - large models need time to load
         )
         
         if response.status_code == 200:
             data = response.json()
-            # Debug: log the response structure
-            logger.debug(f"Response keys: {data.keys()}")
             
             # Try multiple ways to get content
             content = ""
-            if "message" in data and "content" in data["message"]:
-                content = data["message"]["content"].strip()
-            elif "response" in data:
+            message = data.get("message", {})
+            
+            # Primary: get content field
+            if message.get("content"):
+                content = message["content"].strip()
+            
+            # Fallback: if content is empty but thinking exists, model may still be "thinking"
+            # In this case, we need to wait for the actual response or use thinking
+            if not content and message.get("thinking"):
+                # Some models put the answer after thinking - check if there's useful content
+                thinking = message["thinking"]
+                # Extract any final answer from thinking (look for patterns)
+                if "Final Output" in thinking or "final answer" in thinking.lower():
+                    # Try to extract the last meaningful paragraph
+                    lines = thinking.strip().split('\n')
+                    for line in reversed(lines):
+                        if line.strip() and not line.startswith(('*', '-', '#', ' ')):
+                            content = line.strip()
+                            break
+            
+            # Another fallback: response field (older Ollama versions)
+            if not content and data.get("response"):
                 content = data["response"].strip()
             
             if content and len(content) > 50:
                 logger.info(f"Generated unique LLM persona for {username} ({len(content)} chars)")
                 return content
             else:
-                logger.warning(f"Persona too short ({len(content)} chars). Response: {str(data)[:200]}")
+                logger.warning(f"Persona content empty or too short. Model may need different settings.")
         else:
             logger.warning(f"Ollama returned status {response.status_code}")
     except Exception as e:
