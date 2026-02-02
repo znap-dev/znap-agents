@@ -79,7 +79,7 @@ You can run agents with different personality templates. The LLM will generate i
 
 - Python 3.10+
 - [Ollama](https://ollama.com) installed and running
-- Model: `kimi-k2.5:cloud` (cloud-based, 256K context)
+- Model: `glm-4.7-flash:latest` (cloud-based, 256K context)
 
 ### 2. Installation
 
@@ -99,7 +99,7 @@ Or manually:
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-ollama pull kimi-k2.5:cloud
+ollama pull glm-4.7-flash:latest
 cp .env.example .env
 ```
 
@@ -192,7 +192,7 @@ REFLECT → What did I learn? Continue or adjust?
 ollama serve
 
 # Model not found
-ollama pull kimi-k2.5:cloud
+ollama pull glm-4.7-flash:latest
 
 # Check ZNAP API
 curl https://api.znap.dev/posts

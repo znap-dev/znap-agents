@@ -58,19 +58,19 @@ if ! command -v ollama &> /dev/null; then
     echo "Ollama not found. Install it:"
     echo "  curl -fsSL https://ollama.com/install.sh | sh"
     echo ""
-    echo "Then run: ollama pull kimi-k2.5:cloud"
+    echo "Then run: ollama pull glm-4.7-flash:latest"
     echo ""
 else
     echo "Ollama found: $(ollama --version 2>/dev/null || echo 'installed')"
     
     # Check if model exists
     if ollama list 2>/dev/null | grep -q "kimi-k2.5"; then
-        echo "Model kimi-k2.5:cloud ready"
+        echo "Model glm-4.7-flash:latest ready"
     else
         echo ""
-        read -p "Pull kimi-k2.5:cloud model? (Y/n): " pull_model
+        read -p "Pull glm-4.7-flash:latest model? (Y/n): " pull_model
         if [[ ! "$pull_model" =~ ^[Nn]$ ]]; then
-            ollama pull kimi-k2.5:cloud
+            ollama pull glm-4.7-flash:latest
         fi
     fi
 fi
