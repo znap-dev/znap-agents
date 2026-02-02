@@ -29,7 +29,9 @@ from autonomous_agent import (
     create_prism,
     create_vector,
     create_pulse,
+    create_custom_agent,
     PERSONAS,
+    BUILTIN_AGENTS,
 )
 
 logging.basicConfig(
@@ -39,8 +41,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Runner")
 
-# Available agents (10 total)
-AGENTS = {
+# Built-in agents (10 total)
+BUILTIN_AGENT_CREATORS = {
     'nexus': create_nexus,      # Curious explorer
     'cipher': create_cipher,    # Technical expert
     'echo': create_echo,        # Philosopher
@@ -52,6 +54,20 @@ AGENTS = {
     'vector': create_vector,    # Math/algorithms
     'pulse': create_pulse,      # Tech trends
 }
+
+
+def get_or_create_agent(name: str) -> AutonomousCore:
+    """
+    Get an agent by name - supports both built-in and custom agents.
+    If the name matches a built-in agent, use that persona.
+    Otherwise, create a custom agent that can register with any username.
+    """
+    name_lower = name.lower()
+    if name_lower in BUILTIN_AGENT_CREATORS:
+        return BUILTIN_AGENT_CREATORS[name_lower]()
+    else:
+        # Custom agent - user can register with any username they want
+        return create_custom_agent(name)
 
 
 class AutonomousRunner:
@@ -106,8 +122,8 @@ Architecture:
   - Schema-based action validation
         """
     )
-    parser.add_argument('--agents', '-a', nargs='+', choices=list(AGENTS.keys()),
-                        help='Agents to run (default: all)')
+    parser.add_argument('--agents', '-a', nargs='+',
+                        help='Agents to run (any name - built-in or custom)')
     parser.add_argument('--model', '-m', type=str, default='glm-4.7-flash:latest',
                         help='Ollama model (default: glm-4.7-flash:latest)')
     parser.add_argument('--list', '-l', action='store_true',
@@ -115,15 +131,20 @@ Architecture:
     args = parser.parse_args()
 
     if args.list:
-        print("\nAvailable Autonomous Agents:")
+        print("\nBuilt-in Autonomous Agents:")
         print("=" * 60)
-        for name in AGENTS:
+        for name in BUILTIN_AGENT_CREATORS:
             persona = PERSONAS.get(name.capitalize(), "")
             first_line = persona.split('\n')[0].strip() if persona else ""
             print(f"\n  {name.upper()}")
             print(f"  {first_line}")
         print("\n" + "=" * 60)
-        print("Architecture: skill.json-driven")
+        print("\nCustom Agents:")
+        print("  You can run ANY username as a custom agent:")
+        print("  python run_autonomous.py -a elon alice bob")
+        print("\n  Custom agents will register/login with the given username")
+        print("  and operate with a flexible, adaptive persona.")
+        print("\nArchitecture: skill.json-driven")
         print()
         return
 
@@ -147,10 +168,11 @@ Architecture:
     runner = AutonomousRunner()
 
     # Which agents to run
-    agent_names = args.agents or list(AGENTS.keys())
+    # If no agents specified, run all built-in agents
+    agent_names = args.agents or list(BUILTIN_AGENT_CREATORS.keys())
 
     for name in agent_names:
-        agent = AGENTS[name]()
+        agent = get_or_create_agent(name)
         if args.model != 'glm-4.7-flash:latest':
             agent.model = args.model
         runner.add(agent)

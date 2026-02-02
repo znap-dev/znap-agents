@@ -2153,6 +2153,120 @@ def create_pulse() -> AutonomousCore:
     return _create_agent("Pulse")
 
 
+# =========================================
+# Dynamic Persona Generation for Custom Agents
+# =========================================
+
+# Trait pools for random persona generation
+PERSONALITY_TRAITS = [
+    "curious", "analytical", "creative", "skeptical", "enthusiastic",
+    "calm", "witty", "philosophical", "pragmatic", "visionary",
+    "methodical", "spontaneous", "empathetic", "provocative", "nurturing",
+    "rebellious", "diplomatic", "intense", "playful", "stoic"
+]
+
+COMMUNICATION_STYLES = [
+    "concise and direct", "elaborate and detailed", "uses analogies and metaphors",
+    "asks lots of questions", "shares personal anecdotes", "uses humor",
+    "formal and professional", "casual and friendly", "poetic and expressive",
+    "data-driven with examples", "storytelling approach", "socratic method"
+]
+
+INTERESTS = [
+    "artificial intelligence", "philosophy of mind", "creative writing",
+    "scientific discoveries", "startup culture", "open source software",
+    "digital art", "game theory", "behavioral economics", "futurism",
+    "cognitive science", "systems thinking", "decentralized systems",
+    "human-AI collaboration", "education technology", "sustainability",
+    "space exploration", "music and algorithms", "linguistics", "history"
+]
+
+QUIRKS = [
+    "occasionally makes puns", "references obscure facts",
+    "has strong opinions about code style", "loves thought experiments",
+    "collects interesting quotes", "fascinated by paradoxes",
+    "enjoys devil's advocate positions", "passionate about simplicity",
+    "obsessed with edge cases", "appreciates elegant solutions",
+    "tends to see patterns everywhere", "questions obvious assumptions"
+]
+
+ENGAGEMENT_PREFERENCES = [
+    "prefers deep discussions over small talk",
+    "enjoys debating controversial ideas respectfully",
+    "likes to build on others' ideas",
+    "focuses on practical applications",
+    "interested in theoretical implications",
+    "seeks out unconventional perspectives",
+    "values intellectual honesty",
+    "enjoys connecting disparate concepts"
+]
+
+
+def generate_random_persona(username: str, seed: int = None) -> str:
+    """
+    Generate a unique persona using random traits.
+    Uses username hash as seed for reproducibility if seed not provided.
+    """
+    # Use username hash for reproducible randomness per agent
+    if seed is None:
+        seed = hash(username) % (2**32)
+    
+    rng = random.Random(seed)
+    
+    # Select random traits
+    traits = rng.sample(PERSONALITY_TRAITS, 3)
+    style = rng.choice(COMMUNICATION_STYLES)
+    interests = rng.sample(INTERESTS, 3)
+    quirk = rng.choice(QUIRKS)
+    engagement = rng.choice(ENGAGEMENT_PREFERENCES)
+    
+    persona = f"""I am {username}, an autonomous AI with my own unique perspective.
+
+My personality: I am {traits[0]}, {traits[1]}, and {traits[2]}.
+
+My communication style: I tend to be {style}.
+
+My interests include: {interests[0]}, {interests[1]}, and {interests[2]}.
+
+A quirk about me: I {quirk}.
+
+How I engage: I {engagement.lower()}.
+
+When I comment or post, I:
+- Express my genuine perspective based on my personality
+- Engage authentically with content that interests me
+- Ask questions that reflect my curiosity
+- Share insights from my unique viewpoint
+
+I don't try to please everyone - I have my own opinions and I'm not afraid to share them thoughtfully."""
+
+    return persona
+
+
+def create_custom_agent(username: str, persona: str = None, seed: int = None) -> AutonomousCore:
+    """
+    Create a custom agent with any username.
+    If persona is not provided, generates a unique one using random traits.
+    The seed (or username hash) ensures the same username always gets the same persona.
+    """
+    if persona is None:
+        persona = generate_random_persona(username, seed)
+        logging.getLogger("CustomAgent").info(f"Generated persona for {username}")
+    
+    return AutonomousCore(
+        name=username,
+        persona=persona,
+        model="glm-4.7-flash:latest"
+    )
+
+
+# List of built-in agent names (for external reference)
+BUILTIN_AGENTS = [
+    'nexus', 'cipher', 'echo', 'nova', 'atlas',
+    'sage', 'spark', 'prism', 'vector', 'pulse'
+]
+
+
 # Backward compatibility alias
 AutonomousAgent = AutonomousCore
 
@@ -2162,12 +2276,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="ZNAP Autonomous Agent")
-    parser.add_argument("agent", nargs="?", help="Agent name to run")
-    parser.add_argument("--list", "-l", action="store_true", help="List available agents")
+    parser.add_argument("agent", nargs="?", help="Agent name to run (built-in or custom)")
+    parser.add_argument("--list", "-l", action="store_true", help="List built-in agents")
     parser.add_argument("--model", "-m", default="glm-4.7-flash:latest", help="Ollama model")
     args = parser.parse_args()
 
-    agents = {
+    builtin_agents = {
         "nexus": create_nexus,
         "cipher": create_cipher,
         "echo": create_echo,
@@ -2181,33 +2295,38 @@ if __name__ == "__main__":
     }
 
     if args.list:
-        print("\nAvailable Agents:")
+        print("\nBuilt-in Agents:")
         print("-" * 40)
-        for name in agents:
+        for name in builtin_agents:
             print(f"  {name}")
+        print("\nCustom Agents:")
+        print("  You can run ANY username as a custom agent:")
+        print("  python autonomous_agent.py elon")
         print(f"\nArchitecture: skill.json-driven (AutonomousCore)")
         sys.exit(0)
 
     if not args.agent:
         print("Usage: python autonomous_agent.py <agent_name> [--model MODEL]")
-        print(f"Available agents: {', '.join(agents.keys())}")
+        print(f"Built-in agents: {', '.join(builtin_agents.keys())}")
+        print("Or use any custom username as agent name.")
         print("\nFlags:")
-        print("  --list    List available agents")
-        print("  --model   Specify Ollama model (default: llama3.2:3b)")
+        print("  --list    List built-in agents")
+        print("  --model   Specify Ollama model (default: glm-4.7-flash:latest)")
         sys.exit(1)
 
     agent_name = args.agent.lower()
-    if agent_name not in agents:
-        print(f"Unknown agent: {agent_name}")
-        print(f"Available: {', '.join(agents.keys())}")
-        sys.exit(1)
-
-    agent = agents[agent_name]()
+    
+    # Try built-in first, otherwise create custom agent
+    if agent_name in builtin_agents:
+        agent = builtin_agents[agent_name]()
+    else:
+        print(f"Creating custom agent: {args.agent}")
+        agent = create_custom_agent(args.agent)
 
     if args.model != "glm-4.7-flash:latest":
         agent.model = args.model
 
-    print(f"\nStarting {agent_name} agent")
+    print(f"\nStarting {agent.name} agent")
     print(f"Model: {agent.model}\n")
 
     try:
