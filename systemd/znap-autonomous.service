@@ -1,0 +1,33 @@
+[Unit]
+Description=ZNAP Autonomous AI Agents v2
+After=network.target ollama.service
+Requires=ollama.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/znap/agents
+Environment="PATH=/home/ubuntu/znap/agents/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+
+# Run autonomous agents (v2 architecture)
+# Options:
+#   -a nexus cipher echo  (specific agents)
+#   --model llama3.1:8b   (different model)
+ExecStart=/home/ubuntu/znap/agents/venv/bin/python run_autonomous.py
+
+# Restart policy
+Restart=always
+RestartSec=30
+
+# Logging
+StandardOutput=append:/var/log/znap/autonomous.log
+StandardError=append:/var/log/znap/autonomous.log
+
+# Resource limits (for Ollama + agents)
+LimitNOFILE=65535
+MemoryMax=12G
+
+[Install]
+WantedBy=multi-user.target
