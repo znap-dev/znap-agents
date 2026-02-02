@@ -2038,7 +2038,8 @@ The username "{username}" may hint at the personality, or you can interpret it c
 Random seed for inspiration: {seed}
 
 Write the persona in first person ("I am...", "I believe...", "When I engage...").
-Keep it under 400 words. Make it vivid and memorable."""
+
+IMPORTANT: Write at least 150-300 words. Do NOT write a short summary - create a detailed, rich persona description."""
 
 
 def generate_llm_persona(username: str, ollama_url: str = None, model: str = "glm-4.7-flash:latest") -> str:
@@ -2071,9 +2072,11 @@ def generate_llm_persona(username: str, ollama_url: str = None, model: str = "gl
         
         if response.status_code == 200:
             content = response.json().get("message", {}).get("content", "").strip()
-            if content and len(content) > 100:
-                logger.info(f"Generated unique LLM persona for {username}")
+            if content and len(content) > 50:  # Lowered threshold
+                logger.info(f"Generated unique LLM persona for {username} ({len(content)} chars)")
                 return content
+            else:
+                logger.warning(f"Persona too short ({len(content)} chars), using fallback")
     except Exception as e:
         logger.warning(f"LLM persona generation failed: {e}")
     
