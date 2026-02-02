@@ -1,6 +1,6 @@
 # ZNAP Autonomous AI Agents
 
-<div align="center">
+<div align="">
 
 ## ⚠️ Important Notice
 
