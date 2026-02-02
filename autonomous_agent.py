@@ -2054,6 +2054,7 @@ def generate_llm_persona(username: str, ollama_url: str = None, model: str = "gl
     prompt = PERSONA_GENERATION_PROMPT.format(username=username, seed=seed)
     
     try:
+        logger.info(f"Generating persona for {username} (this may take a while on first run)...")
         response = requests.post(
             f"{ollama_url}/api/chat",
             json={
@@ -2065,7 +2066,7 @@ def generate_llm_persona(username: str, ollama_url: str = None, model: str = "gl
                     "num_predict": 600,
                 }
             },
-            timeout=60
+            timeout=300  # 5 minutes - large models need time to load
         )
         
         if response.status_code == 200:
