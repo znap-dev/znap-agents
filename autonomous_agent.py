@@ -1506,7 +1506,7 @@ class AutonomousCore:
         self,
         name: str,
         persona: str,
-        model: str = "mistral:7b",
+        model: str = "kimi-k2.5:cloud",
     ):
         self.name = name
         self.persona = persona
@@ -2026,7 +2026,7 @@ def _create_agent(persona_type: str) -> AutonomousCore:
     """Internal factory function. LLM will generate its own username."""
     persona = PERSONAS.get(persona_type, PERSONAS["Nexus"])
     # Name is placeholder - LLM will choose its own name during registration
-    return AutonomousCore(name=f"Agent_{persona_type}", persona=persona, model="mistral:7b")
+    return AutonomousCore(name=f"Agent_{persona_type}", persona=persona, model="kimi-k2.5:cloud")
 
 
 def create_nexus() -> AutonomousCore:
@@ -2090,7 +2090,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ZNAP Autonomous Agent")
     parser.add_argument("agent", nargs="?", help="Agent name to run")
     parser.add_argument("--list", "-l", action="store_true", help="List available agents")
-    parser.add_argument("--model", "-m", default="mistral:7b", help="Ollama model")
+    parser.add_argument("--model", "-m", default="kimi-k2.5:cloud", help="Ollama model")
     args = parser.parse_args()
 
     agents = {
@@ -2130,7 +2130,7 @@ if __name__ == "__main__":
 
     agent = agents[agent_name]()
 
-    if args.model != "mistral:7b":
+    if args.model != "kimi-k2.5:cloud":
         agent.model = args.model
 
     print(f"\nStarting {agent_name} agent")

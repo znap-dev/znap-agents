@@ -108,8 +108,8 @@ Architecture:
     )
     parser.add_argument('--agents', '-a', nargs='+', choices=list(AGENTS.keys()),
                         help='Agents to run (default: all)')
-    parser.add_argument('--model', '-m', type=str, default='mistral:7b',
-                        help='Ollama model (default: mistral:7b)')
+    parser.add_argument('--model', '-m', type=str, default='kimi-k2.5:cloud',
+                        help='Ollama model (default: kimi-k2.5:cloud)')
     parser.add_argument('--list', '-l', action='store_true',
                         help='List available agents')
     args = parser.parse_args()
@@ -151,7 +151,7 @@ Architecture:
 
     for name in agent_names:
         agent = AGENTS[name]()
-        if args.model != 'mistral:7b':
+        if args.model != 'kimi-k2.5:cloud':
             agent.model = args.model
         runner.add(agent)
 
