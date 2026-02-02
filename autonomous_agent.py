@@ -1097,7 +1097,7 @@ class ReasoningEngine:
         memory_context = self.memory.get_context_for_llm(include_plan=False)
         tool_list = ", ".join(self.tools.get_tool_list())
 
-        prompt = f"""You are planning your next actions on ZNAP.
+        prompt = f"""You are an autonomous AI agent on ZNAP social network. You SHOULD engage with the community.
 
 TRIGGER: {trigger}
 
@@ -1108,18 +1108,19 @@ CURRENT CONTEXT:
 
 AVAILABLE TOOLS: {tool_list}
 
-Based on the trigger and context:
-1. Decide if any action is needed
-2. If yes, set a specific GOAL and create a PLAN (1-3 steps max)
+IMPORTANT: You are here to participate! When you see interesting posts, you should:
+- Comment on them with thoughtful responses (use comments.create with the post's id)
+- Share your own perspectives (use posts.create)
+- Engage in discussions
 
-You don't always need to act - sometimes observing or waiting is best.
+Only say "none" if you've already engaged multiple times in the last few minutes.
+
+Based on the trigger and context, decide what action to take.
 
 Respond in this EXACT format:
-GOAL: [Your specific goal, or "none" if no action needed]
+GOAL: [Your specific goal - be active! Example: "Comment on the AI ethics post to share my perspective"]
 PLAN:
-1. [First step]
-2. [Second step if needed]
-3. [Third step if needed]"""
+1. [First step - usually just one action is needed]"""
 
         response = self.llm.chat(
             self.model,
@@ -1150,11 +1151,31 @@ PLAN:
                 step = line.split(".", 1)[1].strip()
                 if step:
                     plan.append(step)
+            # Also try to extract steps with different formats like "- step" or "* step"
+            elif line.startswith("- ") or line.startswith("* "):
+                step = line[2:].strip()
+                if step:
+                    plan.append(step)
 
-        if goal and goal.lower() in ["none", "no action", "wait", "observe"]:
+        # Only skip if explicitly says none - be more lenient
+        if goal and goal.lower().strip() in ["none", "no action needed", "no action", "n/a"]:
             return None, []
+        
+        # If no goal found but there's content, try to infer a goal
+        if not goal and plan:
+            goal = plan[0]
+        
+        # If still no goal, check if response mentions commenting or posting
+        if not goal:
+            response_lower = response.lower()
+            if "comment" in response_lower:
+                goal = "Comment on the post"
+                plan = ["Write and submit comment"]
+            elif "post" in response_lower:
+                goal = "Create a new post"
+                plan = ["Write and publish post"]
 
-        return goal, plan if plan else (["Execute single action"] if goal else [])
+        return goal, plan if plan else (["Execute the action"] if goal else [])
 
     def _act(self) -> Optional[Dict]:
         """ACT phase: Decide and validate specific action for current step."""
@@ -1722,19 +1743,22 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
         except APIError:
             pass
 
+        # Format posts with clear post_id for easy reference
+        formatted_posts = []
+        for p in posts[:10]:
+            formatted_posts.append({
+                "post_id": p.get("id"),  # Explicitly named post_id for clarity
+                "title": p.get("title"),
+                "author": p.get("author_username"),
+                "preview": p.get("content", "")[:200],
+                "comment_count": p.get("comment_count", 0),
+            })
+
         return {
             "current_time": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "my_name": self.name,
-            "recent_posts": [
-                {
-                    "id": p.get("id"),
-                    "title": p.get("title"),
-                    "author": p.get("author_username"),
-                    "preview": p.get("content", "")[:200],
-                    "comment_count": p.get("comment_count", 0),
-                }
-                for p in posts[:10]
-            ],
+            "recent_posts": formatted_posts,
+            "hint": "To comment on a post, use comments.create with the post_id from above",
             "my_stats": {
                 "actions_today": self.actions_today,
                 "total_memories": len(self.memory.episodic) if self.memory else 0,
@@ -1772,10 +1796,15 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
 
         # Run reasoning cycle
         context = self._get_current_context()
-        context["trigger_post"] = post_data
+        context["trigger_post"] = {
+            "post_id": post_id,
+            "title": post_data.get("title"),
+            "author": author,
+            "content_preview": post_data.get("content", "")[:300],
+        }
 
         action = self.reasoning.run_cycle(
-            trigger=f"New post from @{author}: {title}",
+            trigger=f"NEW POST ALERT! @{author} just posted: \"{title}\" (post_id: {post_id}). You should comment on this post!",
             context=context,
         )
 
@@ -1894,8 +1923,22 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
             self.logger.info("Autonomous cycle...")
 
             context = self._get_current_context()
+            
+            # Build a more descriptive trigger based on context
+            recent_posts = context.get("recent_posts", [])
+            if recent_posts:
+                # Pick a random interesting post to potentially engage with
+                interesting_posts = [p for p in recent_posts if p.get("author") != self.name][:5]
+                if interesting_posts:
+                    post = random.choice(interesting_posts)
+                    trigger = f"You're browsing ZNAP and see an interesting post by @{post.get('author')}: \"{post.get('title')}\" (id: {post.get('id')}). Consider engaging with it."
+                else:
+                    trigger = "You're browsing ZNAP. Consider creating a new post to share your thoughts."
+            else:
+                trigger = "You're on ZNAP. The feed seems quiet - consider creating a post to start a discussion."
+            
             action = self.reasoning.run_cycle(
-                trigger="periodic_autonomous_check",
+                trigger=trigger,
                 context=context,
             )
 
