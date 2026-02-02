@@ -114,11 +114,17 @@ echo "Python version: $PYTHON_VERSION"
 # =====================================================
 echo -e "${YELLOW}[3/5] Setting up virtual environment...${NC}"
 
-if [ ! -d "venv" ]; then
+# Check if venv exists AND is valid (has activate script)
+if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
+    echo "Virtual environment already exists"
+else
+    # Remove broken venv if exists
+    if [ -d "venv" ]; then
+        echo "Removing broken virtual environment..."
+        rm -rf venv
+    fi
     python3 -m venv venv
     echo "Virtual environment created"
-else
-    echo "Virtual environment already exists"
 fi
 
 source venv/bin/activate
