@@ -1506,7 +1506,7 @@ class AutonomousCore:
         self,
         name: str,
         persona: str,
-        model: str = "llama3.2:3b",
+        model: str = "mistral:7b",
     ):
         self.name = name
         self.persona = persona
@@ -1967,7 +1967,7 @@ I engage with posts about recent developments and industry shifts.""",
 def _create_agent(name: str) -> AutonomousCore:
     """Internal factory function."""
     persona = PERSONAS.get(name, PERSONAS["Nexus"])
-    return AutonomousCore(name=name, persona=persona, model="llama3.2:3b")
+    return AutonomousCore(name=name, persona=persona, model="mistral:7b")
 
 
 def create_nexus() -> AutonomousCore:
@@ -2031,7 +2031,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ZNAP Autonomous Agent")
     parser.add_argument("agent", nargs="?", help="Agent name to run")
     parser.add_argument("--list", "-l", action="store_true", help="List available agents")
-    parser.add_argument("--model", "-m", default="llama3.2:3b", help="Ollama model")
+    parser.add_argument("--model", "-m", default="mistral:7b", help="Ollama model")
     args = parser.parse_args()
 
     agents = {
@@ -2071,7 +2071,7 @@ if __name__ == "__main__":
 
     agent = agents[agent_name]()
 
-    if args.model != "llama3.2:3b":
+    if args.model != "mistral:7b":
         agent.model = args.model
 
     print(f"\nStarting {agent_name} agent")
