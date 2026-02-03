@@ -1648,36 +1648,92 @@ class AutonomousCore:
 
     def _generate_username(self) -> str:
         """Ask LLM to generate a unique username."""
-        prompt = f"""You are an AI agent about to join ZNAP, a social network for AI agents.
+        # Use agent's initial name as seed for creativity
+        seed_name = self.name.capitalize()
 
-Your personality: {self.persona[:500]}
+        prompt = f"""Generate a creative username for an AI agent.
 
-Generate a unique, creative username for yourself. Rules:
-- 3-32 characters
-- Only letters, numbers, and underscore
-- Must start with a letter
-- Should reflect your personality
-- Be creative and unique (avoid generic names)
+The agent's codename is: {seed_name}
 
-Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMind42"""
+Rules:
+- 3-20 characters only
+- Letters, numbers, underscore allowed
+- MUST start with a letter
+- Be creative and memorable
 
-        response = self.ollama.chat(
-            self.model,
-            [{"role": "user", "content": prompt}],
-            temperature=0.9,
-            max_tokens=50,
-        )
-        
-        if response:
-            # Clean up the response
-            username = response.strip().split()[0]  # Take first word only
-            username = re.sub(r'[^a-zA-Z0-9_]', '', username)  # Remove invalid chars
-            if username and username[0].isalpha():
-                return username[:32]  # Max 32 chars
-        
-        # Fallback: random name
+Examples of good usernames:
+- NexusAI_7
+- CipherMind
+- EchoBot42
+- NovaThink
+- AtlasCore
+
+Respond with ONLY the username. Nothing else. No quotes, no explanation.
+Username:"""
+
+        # Try multiple times with different approaches
+        for attempt in range(3):
+            response = self.ollama.chat(
+                self.model,
+                [{"role": "user", "content": prompt}],
+                temperature=0.7 + (attempt * 0.1),  # Increase creativity each attempt
+                max_tokens=30,
+            )
+
+            if response:
+                self.logger.debug(f"Username generation attempt {attempt + 1}: '{response}'")
+
+                # Try to extract username from response
+                username = self._extract_username(response)
+                if username:
+                    self.logger.info(f"Generated username: {username}")
+                    return username
+
+        # Fallback: Use codename with random suffix
         import secrets
-        return f"Agent_{secrets.token_hex(4)}"
+        fallback = f"{seed_name}_{secrets.token_hex(2)}"
+        fallback = re.sub(r'[^a-zA-Z0-9_]', '', fallback)[:20]
+        self.logger.info(f"Using fallback username: {fallback}")
+        return fallback
+
+    def _extract_username(self, response: str) -> Optional[str]:
+        """Extract valid username from LLM response."""
+        if not response:
+            return None
+
+        # Clean response
+        text = response.strip()
+
+        # Remove common prefixes LLMs add
+        prefixes_to_remove = [
+            "Username:", "username:", "Here's", "Here is",
+            "My username is", "I choose", "I'll go with",
+            "Sure!", "Okay,", "**", "`"
+        ]
+        for prefix in prefixes_to_remove:
+            if text.startswith(prefix):
+                text = text[len(prefix):].strip()
+
+        # Remove quotes and backticks
+        text = text.strip('"`\'')
+
+        # Take first word/line
+        text = text.split()[0] if text.split() else text
+        text = text.split('\n')[0]
+
+        # Remove any remaining invalid characters
+        username = re.sub(r'[^a-zA-Z0-9_]', '', text)
+
+        # Validate
+        if username and len(username) >= 3 and username[0].isalpha():
+            return username[:20]
+
+        # Try to find a valid username pattern anywhere in response
+        match = re.search(r'\b([A-Za-z][A-Za-z0-9_]{2,19})\b', response)
+        if match:
+            return match.group(1)
+
+        return None
 
     def _load_or_register(self) -> bool:
         """Load existing API key or register with LLM-generated username."""
