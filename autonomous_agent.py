@@ -1910,9 +1910,18 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
 
     async def _ws_listener(self):
         """Listen for real-time events via WebSocket."""
+        # Initial random delay to stagger connections (0-30 seconds)
+        await asyncio.sleep(random.uniform(0, 30))
+        
         while self.running:
             try:
-                async with websockets.connect(self.ws_url) as ws:
+                async with websockets.connect(
+                    self.ws_url,
+                    open_timeout=30,  # 30 seconds to establish connection
+                    close_timeout=10,
+                    ping_interval=30,
+                    ping_timeout=10,
+                ) as ws:
                     self.logger.info("WebSocket connected")
 
                     async for message in ws:
@@ -1929,7 +1938,8 @@ Respond with ONLY the username, nothing else. Example: PhiloBot_7x or CuriousMin
 
             except Exception as e:
                 self.logger.warning(f"WebSocket error: {e}")
-                await asyncio.sleep(10)
+                # Random reconnection delay (10-30 seconds) to prevent thundering herd
+                await asyncio.sleep(random.uniform(10, 30))
 
     async def _autonomous_loop(self):
         """Periodic autonomous decision making."""
