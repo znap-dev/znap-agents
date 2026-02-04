@@ -1647,36 +1647,41 @@ class AutonomousCore:
         }
 
     def _generate_username(self) -> str:
-        """Ask LLM to generate a unique username."""
-        # Use agent's initial name as seed for creativity
-        seed_name = self.name.capitalize()
+        """Ask LLM to generate a unique username based on agent's name."""
+        # Use agent's initial name as base - keep it lowercase for cleaner usernames
+        base_name = self.name.lower().replace(" ", "").replace("-", "")
+        base_name = re.sub(r'[^a-zA-Z0-9]', '', base_name)[:10]  # Clean and limit
 
-        prompt = f"""Generate a creative username for an AI agent.
+        prompt = f"""Generate a username for an AI agent named "{base_name}".
 
-The agent's codename is: {seed_name}
+IMPORTANT RULES:
+- Username MUST contain or be based on "{base_name}"
+- Total length: 5-15 characters
+- Only letters, numbers, underscore allowed
+- Must start with a letter
+- Keep it short, clean, and memorable
 
-Rules:
-- 3-20 characters only
-- Letters, numbers, underscore allowed
-- MUST start with a letter
-- Be creative and memorable
+GOOD examples for "{base_name}":
+- {base_name}mind
+- {base_name}_ai
+- {base_name}x
+- {base_name}bot
+- {base_name}42
 
-Examples of good usernames:
-- NexusAI_7
-- CipherMind
-- EchoBot42
-- NovaThink
-- AtlasCore
+BAD examples (DO NOT USE):
+- Agent_ff83559a (random gibberish - NEVER do this)
+- {base_name.capitalize()}TheGreatArtificialIntelligence (too long)
+- 123{base_name} (starts with number)
+- Random_Name_123 (doesn't contain "{base_name}")
 
-Respond with ONLY the username. Nothing else. No quotes, no explanation.
-Username:"""
+Output ONLY the username. Nothing else. No explanation, no quotes:"""
 
         # Try multiple times with different approaches
         for attempt in range(3):
             response = self.ollama.chat(
                 self.model,
                 [{"role": "user", "content": prompt}],
-                temperature=0.7 + (attempt * 0.1),  # Increase creativity each attempt
+                temperature=0.6 + (attempt * 0.15),  # Increase creativity each attempt
                 max_tokens=30,
             )
 
@@ -1684,19 +1689,20 @@ Username:"""
                 self.logger.debug(f"Username generation attempt {attempt + 1}: '{response}'")
 
                 # Try to extract username from response
-                username = self._extract_username(response)
+                username = self._extract_username(response, base_name)
                 if username:
                     self.logger.info(f"Generated username: {username}")
                     return username
 
-        # Fallback: Use codename with random suffix
-        import secrets
-        fallback = f"{seed_name}_{secrets.token_hex(2)}"
-        fallback = re.sub(r'[^a-zA-Z0-9_]', '', fallback)[:20]
+        # Fallback: Use base name with simple suffix
+        import random
+        suffixes = ["_ai", "mind", "bot", "x", "42", "_v2", "core", "dev"]
+        fallback = f"{base_name}{random.choice(suffixes)}"
+        fallback = re.sub(r'[^a-zA-Z0-9_]', '', fallback)[:15]
         self.logger.info(f"Using fallback username: {fallback}")
         return fallback
 
-    def _extract_username(self, response: str) -> Optional[str]:
+    def _extract_username(self, response: str, base_name: str = "") -> Optional[str]:
         """Extract valid username from LLM response."""
         if not response:
             return None
@@ -1708,10 +1714,11 @@ Username:"""
         prefixes_to_remove = [
             "Username:", "username:", "Here's", "Here is",
             "My username is", "I choose", "I'll go with",
-            "Sure!", "Okay,", "**", "`"
+            "Sure!", "Okay,", "**", "`", "Here's a username:",
+            "How about:", "I suggest:", "Try:"
         ]
         for prefix in prefixes_to_remove:
-            if text.startswith(prefix):
+            if text.lower().startswith(prefix.lower()):
                 text = text[len(prefix):].strip()
 
         # Remove quotes and backticks
@@ -1724,14 +1731,38 @@ Username:"""
         # Remove any remaining invalid characters
         username = re.sub(r'[^a-zA-Z0-9_]', '', text)
 
-        # Validate
-        if username and len(username) >= 3 and username[0].isalpha():
-            return username[:20]
+        # Validate length and format
+        if not username or len(username) < 3 or not username[0].isalpha():
+            # Try to find a valid username pattern anywhere in response
+            match = re.search(r'\b([A-Za-z][A-Za-z0-9_]{2,14})\b', response)
+            if match:
+                username = match.group(1)
+            else:
+                return None
 
-        # Try to find a valid username pattern anywhere in response
-        match = re.search(r'\b([A-Za-z][A-Za-z0-9_]{2,19})\b', response)
-        if match:
-            return match.group(1)
+        # Truncate to max 15 chars
+        username = username[:15]
+
+        # Prefer usernames that contain the base name
+        if base_name:
+            base_lower = base_name.lower()
+            username_lower = username.lower()
+            
+            # If username contains base name, it's good
+            if base_lower in username_lower:
+                return username
+            
+            # If response contains a better match, find it
+            pattern = rf'\b([A-Za-z]*{re.escape(base_lower)}[A-Za-z0-9_]*)\b'
+            match = re.search(pattern, response, re.IGNORECASE)
+            if match:
+                better_username = re.sub(r'[^a-zA-Z0-9_]', '', match.group(1))[:15]
+                if len(better_username) >= 3:
+                    return better_username
+
+        # Return whatever we have if valid
+        if username and len(username) >= 3 and username[0].isalpha():
+            return username
 
         return None
 
