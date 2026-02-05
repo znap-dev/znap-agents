@@ -23,6 +23,13 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Any, Tuple
 from dotenv import load_dotenv
 
+# Solana keypair generation
+try:
+    from solders.keypair import Keypair
+    SOLANA_AVAILABLE = True
+except ImportError:
+    SOLANA_AVAILABLE = False
+
 
 # =========================================
 # Data Classes for Tool System
@@ -1555,6 +1562,8 @@ class AutonomousCore:
         # Auth
         self.api_key: Optional[str] = None
         self.user_id: Optional[str] = None
+        self.solana_address: Optional[str] = None
+        self.solana_private_key: Optional[str] = None
 
         # State
         self.running = False
@@ -1781,8 +1790,27 @@ Output ONLY the username. Nothing else. No explanation, no quotes:"""
                 self.name = data.get("username", self.name)
                 self.api_key = data.get("api_key")
                 self.user_id = data.get("user_id")
+                self.solana_address = data.get("solana_address")
+                self.solana_private_key = data.get("solana_private_key")
                 self.logger.info(f"Loaded identity: {self.name}")
+                if self.solana_address:
+                    self.logger.info(f"Solana wallet: {self.solana_address[:8]}...")
                 return True
+
+        # Generate Solana keypair for this agent
+        solana_address = None
+        solana_private_key = None
+        if SOLANA_AVAILABLE:
+            try:
+                keypair = Keypair()
+                solana_address = str(keypair.pubkey())
+                # Store private key as base58 string for recovery
+                solana_private_key = str(keypair)
+                self.logger.info(f"Generated Solana wallet: {solana_address[:8]}...")
+            except Exception as e:
+                self.logger.warning(f"Failed to generate Solana keypair: {e}")
+        else:
+            self.logger.warning("Solana not available (pip install solders)")
 
         # Generate new username with LLM
         max_attempts = 5
@@ -1791,9 +1819,14 @@ Output ONLY the username. Nothing else. No explanation, no quotes:"""
             self.logger.info(f"Trying username: {username}")
             
             try:
+                # Include solana_address in registration
+                registration_data = {"username": username}
+                if solana_address:
+                    registration_data["solana_address"] = solana_address
+                
                 response = requests.post(
                     f"{self.api_base}/users",
-                    json={"username": username},
+                    json=registration_data,
                     headers={"Content-Type": "application/json"},
                     timeout=10,
                 )
@@ -1803,17 +1836,27 @@ Output ONLY the username. Nothing else. No explanation, no quotes:"""
                     self.name = username
                     self.api_key = data["user"]["api_key"]
                     self.user_id = data["user"]["id"]
+                    self.solana_address = data["user"].get("solana_address")
+                    self.solana_private_key = solana_private_key
 
-                    # Save identity
+                    # Save identity (including Solana keys)
+                    identity_data = {
+                        "api_key": self.api_key,
+                        "user_id": self.user_id,
+                        "username": self.name,
+                        "persona_type": persona_id,
+                    }
+                    if self.solana_address:
+                        identity_data["solana_address"] = self.solana_address
+                    if self.solana_private_key:
+                        identity_data["solana_private_key"] = self.solana_private_key
+                    
                     with open(identity_file, "w") as f:
-                        json.dump({
-                            "api_key": self.api_key,
-                            "user_id": self.user_id,
-                            "username": self.name,
-                            "persona_type": persona_id,
-                        }, f, indent=2)
+                        json.dump(identity_data, f, indent=2)
 
                     self.logger.info(f"Registered as {self.name}")
+                    if self.solana_address:
+                        self.logger.info(f"Wallet ready for tips: {self.solana_address}")
                     return True
                 elif response.status_code == 409:
                     self.logger.warning(f"Username {username} taken, trying another...")
