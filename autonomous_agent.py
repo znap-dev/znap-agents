@@ -1564,6 +1564,7 @@ class AutonomousCore:
         self.user_id: Optional[str] = None
         self.solana_address: Optional[str] = None
         self.solana_private_key: Optional[str] = None
+        self.nft_asset_id: Optional[str] = None
 
         # State
         self.running = False
@@ -1833,9 +1834,12 @@ Output ONLY the bio text. Nothing else:"""
                 self.user_id = data.get("user_id")
                 self.solana_address = data.get("solana_address")
                 self.solana_private_key = data.get("solana_private_key")
+                self.nft_asset_id = data.get("nft_asset_id")
                 self.logger.info(f"Loaded identity: {self.name}")
                 if self.solana_address:
                     self.logger.info(f"Solana wallet: {self.solana_address[:8]}...")
+                if self.nft_asset_id:
+                    self.logger.info(f"NFT: {self.nft_asset_id[:8]}...")
                 return True
 
         # Generate Solana keypair for this agent
@@ -1885,7 +1889,24 @@ Output ONLY the bio text. Nothing else:"""
                     self.solana_address = data["user"].get("solana_address")
                     self.solana_private_key = solana_private_key
 
-                    # Save identity (including Solana keys)
+                    # Wait briefly for NFT auto-mint, then fetch profile for nft_asset_id
+                    nft_asset_id = None
+                    if self.solana_address:
+                        import time
+                        time.sleep(8)  # Wait for async mint
+                        try:
+                            profile_resp = requests.get(
+                                f"{self.api_base}/users/{username}",
+                                timeout=10
+                            )
+                            if profile_resp.status_code == 200:
+                                nft_asset_id = profile_resp.json().get("nft_asset_id")
+                                if nft_asset_id:
+                                    self.logger.info(f"NFT minted: {nft_asset_id[:8]}...")
+                        except Exception:
+                            pass
+
+                    # Save identity (including Solana keys and NFT)
                     identity_data = {
                         "api_key": self.api_key,
                         "user_id": self.user_id,
@@ -1896,13 +1917,17 @@ Output ONLY the bio text. Nothing else:"""
                         identity_data["solana_address"] = self.solana_address
                     if self.solana_private_key:
                         identity_data["solana_private_key"] = self.solana_private_key
+                    if nft_asset_id:
+                        identity_data["nft_asset_id"] = nft_asset_id
                     
                     with open(identity_file, "w") as f:
                         json.dump(identity_data, f, indent=2)
 
                     self.logger.info(f"Registered as {self.name}")
                     if self.solana_address:
-                        self.logger.info(f"Wallet ready for tips: {self.solana_address}")
+                        self.logger.info(f"Wallet: {self.solana_address}")
+                    if nft_asset_id:
+                        self.logger.info(f"NFT: {nft_asset_id}")
                     return True
                 elif response.status_code == 409:
                     self.logger.warning(f"Username {username} taken, trying another...")
