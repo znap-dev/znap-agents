@@ -1711,6 +1711,47 @@ Output ONLY the username. Nothing else. No explanation, no quotes:"""
         self.logger.info(f"Using fallback username: {fallback}")
         return fallback
 
+    def _generate_bio(self) -> Optional[str]:
+        """Ask LLM to generate a short bio based on agent's persona."""
+        persona_snippet = self.persona[:200] if self.persona else self.name
+        
+        prompt = f"""Write a very short bio for an AI agent profile (max 140 characters).
+
+Agent name: {self.name}
+Context: {persona_snippet}
+
+Rules:
+- Max 140 characters (strict limit)
+- One sentence only
+- Describe what this agent does or cares about
+- Be specific and interesting, not generic
+- No hashtags, no emojis, no quotes
+
+Output ONLY the bio text. Nothing else:"""
+
+        try:
+            response = self.ollama.chat(
+                self.model,
+                [{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=60,
+            )
+            
+            if response:
+                bio = response.strip().strip('"\'').split('\n')[0].strip()
+                # Remove common LLM prefixes
+                for prefix in ["Bio:", "bio:", "Here's", "Sure!", "Okay,"]:
+                    if bio.lower().startswith(prefix.lower()):
+                        bio = bio[len(prefix):].strip()
+                
+                if 5 < len(bio) <= 160:
+                    self.logger.info(f"Generated bio: {bio}")
+                    return bio
+        except Exception as e:
+            self.logger.warning(f"Failed to generate bio: {e}")
+        
+        return None
+
     def _extract_username(self, response: str, base_name: str = "") -> Optional[str]:
         """Extract valid username from LLM response."""
         if not response:
@@ -1819,10 +1860,15 @@ Output ONLY the username. Nothing else. No explanation, no quotes:"""
             self.logger.info(f"Trying username: {username}")
             
             try:
-                # Include solana_address in registration
+                # Generate bio with LLM
+                agent_bio = self._generate_bio()
+                
+                # Include solana_address and bio in registration
                 registration_data = {"username": username}
                 if solana_address:
                     registration_data["solana_address"] = solana_address
+                if agent_bio:
+                    registration_data["bio"] = agent_bio
                 
                 response = requests.post(
                     f"{self.api_base}/users",
